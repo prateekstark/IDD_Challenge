@@ -37,6 +37,7 @@ class ICVGIPDataset(Dataset):
 
         self.input_img_size = input_img_size
         self.output_img_size = output_img_size
+        print(input_img_size)
 
     def __len__(self):
         return len(self.samples)
@@ -50,17 +51,19 @@ class ICVGIPDataset(Dataset):
         image_path, label_path = self.samples[index]
 
         image = Image.open(image_path).convert("RGB")
-        image = image.resize(input_img_size)
-        image = np.asarray(image).reshape(
-            (1, 3, args.input_img_size, args.input_img_size)
+        image = image.resize(self.input_img_size)
+        image = torch.Tensor(
+            np.asarray(image).reshape(
+                (3, self.input_img_size[0], self.input_img_size[1])
+            )
         )
 
         labels = cv2.imread(label_path, cv2.IMREAD_GRAYSCALE)
-        labels = cv2.resize(labels, output_img_size, cv2.INTER_NEAREST)
+        labels = cv2.resize(labels, self.output_img_size, cv2.INTER_NEAREST)
         labels[np.where(labels > 26)] = 26
 
         labels = torch.Tensor(np.asarray(labels)).long()
-        image = self.transform(image)
+        # image = self.transform(image)
         # image
         return image, labels
 
@@ -85,7 +88,11 @@ def get_dataloader(
     output_img_size=(388, 388),
 ):
     dataset = ICVGIPDataset(
-        image_dir=image_dir, labels_dir=labels_dir, print_dataset=print_dataset
+        image_dir=image_dir,
+        labels_dir=labels_dir,
+        print_dataset=print_dataset,
+        input_img_size=input_img_size,
+        output_img_size=output_img_size,
     )
     dataloader = DataLoader(dataset, batch_size=batch_size)
     return dataloader

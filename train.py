@@ -121,7 +121,6 @@ if __name__ == "__main__":
         epoch_loss = 0
         batch = 0
         for X, y in tqdm(train_dataloader):
-            print(X.shape, y.shape)
             optimizer.zero_grad()
             output = model(X.to(device))
             loss = criterion(output, y.to(device))
