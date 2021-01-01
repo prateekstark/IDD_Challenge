@@ -1,27 +1,31 @@
-import os
-import cv2
 import torch
+import logging
 import argparse
-import numpy as np
 from tqdm import tqdm
-import torch.nn as nn
-import torch.optim as optim
 from arch.unet import UNet20
-import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from arch.hrnet import get_seg_model
 from dataloaders import get_dataloader
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        filename="logfile.log",
+        format="%(levelname)s %(asctime)s %(message)s",
+        filemode="w",
+    )
+
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
     device = torch.device(device)
+    logger.info("Device used: {}".format(dev))
 
     parser = argparse.ArgumentParser(description="IDD Challenge 2020")
     parser.add_argument("--model", help="Default=hrnet", type=str, default="hrnet")
     parser.add_argument("--num_classes", help="Default=27", type=int, default=27)
     parser.add_argument("--train_batch_size", help="Default=8", type=int, default=8)
-    parser.add_argument("--lr", help="Default=0.001", type=float, default=0.001)
+    parser.add_argument("--lr", help="Default=0.01", type=float, default=0.01)
     parser.add_argument("--epochs", help="Default=60", type=int, default=60)
     parser.add_argument(
         "--pretrained_model", help="Default=None", type=str, default=None
@@ -47,6 +51,15 @@ if __name__ == "__main__":
     epochs = args.epochs
     lr = args.lr
 
+    logger.info("train_img_dir={}".format(train_img_dir))
+    logger.info("train_label_dir={}".format(train_label_dir))
+    logger.info("num_classes={}".format(num_classes))
+    logger.info("train_batch_size={}".format(train_batch_size))
+    logger.info("epochs={}".format(epochs))
+    logger.info("learning_rate={}".format(lr))
+
+
+    logger.info("Model Used: {}".format(args.model))
     if "unet" in args.model:
         train_dataloader = get_dataloader(
             image_dir=train_img_dir,
@@ -111,15 +124,18 @@ if __name__ == "__main__":
     else:
         raise ValueError("Model architecture does not exist!")
 
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+    if(args.pretrained_model):
+        model = torch.load(args.pretrained_model)
+
+    criterion = torch.nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = args.epochs, eta_min = 1e-16, last_epoch=-1, verbose=True)
 
     step_losses = []
     epoch_losses = []
 
     for epoch in tqdm(range(epochs)):
         epoch_loss = 0
-        batch = 0
         for X, y in tqdm(train_dataloader):
             optimizer.zero_grad()
             output = model(X.to(device))
@@ -128,12 +144,9 @@ if __name__ == "__main__":
             optimizer.step()
             epoch_loss += loss.item()
             step_losses.append(loss.item())
-
-            if batch % 50 == 0:
-                print("Batch %d, Epoch %d" % (batch, epoch))
-            batch += 1
+        scheduler.step()
         epoch_loss = epoch_loss / len(train_dataloader)
-        print("Average Loss: {}".format(epoch_loss))
+        logger.info("Average Loss: {}".format(epoch_loss))
         epoch_losses.append(epoch_loss)
         torch.save(model, "checkpoint_{}_{}.pth".format(args.model, epoch))
 

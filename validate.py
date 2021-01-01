@@ -36,12 +36,10 @@ if __name__ == "__main__":
     for root, directories, files in os.walk(val_img_dir, topdown=False):
         for name in files:
             img_path = os.path.join(root, name)
-            image = Image.open(img_path).convert("RGB")
-            image = image.resize((args.input_img_size, args.input_img_size))
-            image = np.asarray(image).reshape(
-                (1, 3, args.input_img_size, args.input_img_size)
-            )
+            image = cv2.imread(img_path)
+            image = cv2.resize(image, (args.input_img_size, args.input_img_size), interpolation=cv2.INTER_NEAREST).reshape(1, 3, args.input_img_size, args.input_img_size)
             image = torch.from_numpy(image).float().to(device)
+            image /= 255.0
 
             with torch.no_grad():
                 output = model(image)

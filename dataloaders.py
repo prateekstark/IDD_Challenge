@@ -5,7 +5,6 @@ import numpy as np
 from PIL import Image
 from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
-import matplotlib.pyplot as plt
 
 
 class ICVGIPDataset(Dataset):
@@ -37,7 +36,6 @@ class ICVGIPDataset(Dataset):
 
         self.input_img_size = input_img_size
         self.output_img_size = output_img_size
-        print(input_img_size)
 
     def __len__(self):
         return len(self.samples)
@@ -47,24 +45,16 @@ class ICVGIPDataset(Dataset):
             print(X, y)
 
     def __getitem__(self, index):
-        print(self.samples[index])
         image_path, label_path = self.samples[index]
-
-        image = Image.open(image_path).convert("RGB")
-        image = image.resize(self.input_img_size)
-        image = torch.Tensor(
-            np.asarray(image).reshape(
-                (3, self.input_img_size[0], self.input_img_size[1])
-            )
-        )
+        image = cv2.imread(image_path) / 255.0
+        image = cv2.resize(image, self.input_img_size, interpolation=cv2.INTER_NEAREST).reshape(3, self.input_img_size[0], self.input_img_size[1])
+        image = torch.Tensor(image)
 
         labels = cv2.imread(label_path, cv2.IMREAD_GRAYSCALE)
         labels = cv2.resize(labels, self.output_img_size, cv2.INTER_NEAREST)
         labels[np.where(labels > 26)] = 26
 
         labels = torch.Tensor(np.asarray(labels)).long()
-        # image = self.transform(image)
-        # image
         return image, labels
 
     def transform(self, image):
