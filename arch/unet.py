@@ -6,7 +6,7 @@ import torch.nn.functional as F
 class UNet20(nn.Module):
     def __init__(self, dropout_rate=0.05, output_channels=27):
         super(UNet20, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels=1, out_channels=64, kernel_size=(3, 3))
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=64, kernel_size=(3, 3))
         self.bn1 = nn.BatchNorm2d(64)
         # 570 * 570 * 64
         self.conv2 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=(3, 3))
@@ -94,7 +94,7 @@ class UNet20(nn.Module):
         self.conv18 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=(3, 3))
         self.bn18 = nn.BatchNorm2d(64)
 
-        self.conv19 = nn.Conv2d(in_channels=64, out_channels=1, kernel_size=(1, 1))
+        self.conv19 = nn.Conv2d(in_channels=64, out_channels=output_channels, kernel_size=(1, 1))
         self.bn19 = nn.BatchNorm2d(1)
 
     def forward(self, x):

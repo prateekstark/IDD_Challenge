@@ -1,4 +1,5 @@
 import torch
+import random
 import logging
 import argparse
 from tqdm import tqdm
@@ -9,8 +10,9 @@ from dataloaders import get_dataloader
 
 
 if __name__ == "__main__":
+    identifier = random.randint(0, 10000000000000)
     logging.basicConfig(
-        filename="logfile.log",
+        filename="logfile_{}.log".format(identifier),
         format="%(levelname)s %(asctime)s %(message)s",
         filemode="w",
     )
@@ -19,7 +21,7 @@ if __name__ == "__main__":
     logger.setLevel(logging.DEBUG)
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
     device = torch.device(device)
-    logger.info("Device used: {}".format(dev))
+    logger.info("Device used: {}".format(device))
 
     parser = argparse.ArgumentParser(description="IDD Challenge 2020")
     parser.add_argument("--model", help="Default=hrnet", type=str, default="hrnet")
@@ -51,15 +53,16 @@ if __name__ == "__main__":
     epochs = args.epochs
     lr = args.lr
 
+    logger.info("identifier={}".format(identifier))
     logger.info("train_img_dir={}".format(train_img_dir))
     logger.info("train_label_dir={}".format(train_label_dir))
     logger.info("num_classes={}".format(num_classes))
     logger.info("train_batch_size={}".format(train_batch_size))
     logger.info("epochs={}".format(epochs))
     logger.info("learning_rate={}".format(lr))
-
-
     logger.info("Model Used: {}".format(args.model))
+
+
     if "unet" in args.model:
         train_dataloader = get_dataloader(
             image_dir=train_img_dir,
@@ -148,9 +151,9 @@ if __name__ == "__main__":
         epoch_loss = epoch_loss / len(train_dataloader)
         logger.info("Average Loss: {}".format(epoch_loss))
         epoch_losses.append(epoch_loss)
-        torch.save(model, "checkpoint_{}_{}.pth".format(args.model, epoch))
+        torch.save(model, "checkpoint_{}_{}_{}.pth".format(args.model, epoch, identifier))
 
     fig, axes = plt.subplots(1, 2, figsize=(10, 5))
     axes[0].plot(step_losses)
     axes[1].plot(epoch_losses)
-    plt.savefig("{}_train_analysis.png".format(args.model))
+    plt.savefig("{}_{}_train_analysis.png".format(args.model, identifier))
