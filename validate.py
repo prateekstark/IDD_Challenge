@@ -3,8 +3,9 @@ import cv2
 import torch
 import argparse
 import numpy as np
-from PIL import Image
+from arch.unet import UNet256
 from dataloaders import get_dataloader
+from torchvision import transforms
 
 
 if __name__ == "__main__":
@@ -30,19 +31,17 @@ if __name__ == "__main__":
 
     val_img_dir = args.val_img_dir
     MODEL_PATH = args.model_path
-
-    model = torch.load(MODEL_PATH)
+    model = torch.load(MODEL_PATH, map_location='cuda:0')
     model.eval()
     for root, directories, files in os.walk(val_img_dir, topdown=False):
         for name in files:
             img_path = os.path.join(root, name)
             image = cv2.imread(img_path)
-            image = cv2.resize(image, (args.input_img_size, args.input_img_size), interpolation=cv2.INTER_NEAREST).reshape(1, 3, args.input_img_size, args.input_img_size)
-            image = torch.from_numpy(image).float().to(device)
-            image /= 255.0
+            image = cv2.resize(image, (args.input_img_size, args.input_img_size), interpolation=cv2.INTER_NEAREST)
+            image = torch.from_numpy(np.array([image])).float().to(device) / 255.0
 
             with torch.no_grad():
-                output = model(image)
+                output = model(image.permute(0, 3, 1, 2))
             output = torch.argmax(output, dim=1)
             output = output[0].cpu().detach().numpy().astype("uint8")
             output = cv2.resize(output, (1920, 1080), cv2.INTER_NEAREST)

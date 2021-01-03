@@ -3,14 +3,41 @@ import random
 import logging
 import argparse
 from tqdm import tqdm
-from arch.unet import UNet20
+from arch.unet import UNet20, UNet256
 import matplotlib.pyplot as plt
 from arch.hrnet import get_seg_model
 from dataloaders import get_dataloader
 
 
+def one_hot(targets, C=27):    
+    targets_extend=targets.clone()
+    targets_extend.unsqueeze_(1) # convert to Nx1xHxW
+    one_hot = torch.cuda.FloatTensor(targets_extend.size(0), C, targets_extend.size(2), targets_extend.size(3)).zero_()
+    one_hot.scatter_(1, targets_extend, 1) 
+    return one_hot
+
+class FocalTverskyLoss(torch.nn.Module):
+    def __init__(self, weight=None, size_average=True):
+        super(FocalTverskyLoss, self).__init__()
+
+    def forward(self, inputs, targets, smooth=1, alpha=0.5, beta=0.5, gamma=1):
+        targets = one_hot(targets, 27)
+        inputs = torch.sigmoid(inputs)       
+        
+        inputs = inputs.view(-1)
+        targets = targets.view(-1)
+        
+        TP = (inputs * targets).sum()    
+        FP = ((1-targets) * inputs).sum()
+        FN = (targets * (1-inputs)).sum()
+        
+        Tversky = (TP + smooth) / (TP + alpha*FP + beta*FN + smooth)  
+        FocalTversky = (1 - Tversky)**gamma
+                       
+        return FocalTversky
+
 if __name__ == "__main__":
-    identifier = random.randint(0, 10000000000000)
+    identifier = random.randint(0, 1000000)
     logging.basicConfig(
         filename="logfile_{}.log".format(identifier),
         format="%(levelname)s %(asctime)s %(message)s",
@@ -25,6 +52,8 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="IDD Challenge 2020")
     parser.add_argument("--model", help="Default=hrnet", type=str, default="hrnet")
+    parser.add_argument("--optim", help="Default=adadelta", type=str, default="adadelta")
+    parser.add_argument("--criterion", help="Default=crossentropy", type=str, default="crossentropy")
     parser.add_argument("--num_classes", help="Default=27", type=int, default=27)
     parser.add_argument("--train_batch_size", help="Default=8", type=int, default=8)
     parser.add_argument("--lr", help="Default=0.01", type=float, default=0.01)
@@ -61,9 +90,10 @@ if __name__ == "__main__":
     logger.info("epochs={}".format(epochs))
     logger.info("learning_rate={}".format(lr))
     logger.info("Model Used: {}".format(args.model))
+    logger.info("optim Used: {}".format(args.optim))
 
 
-    if "unet" in args.model:
+    if "unet_orig" in args.model:
         train_dataloader = get_dataloader(
             image_dir=train_img_dir,
             labels_dir=train_label_dir,
@@ -73,6 +103,16 @@ if __name__ == "__main__":
             output_img_size=(388, 388),
         )
         model = UNet20(output_channels=num_classes).to(device)
+    elif "unet_256" in args.model:
+        train_dataloader = get_dataloader(
+            image_dir=train_img_dir,
+            labels_dir=train_label_dir,
+            batch_size=train_batch_size,
+            print_dataset=True,
+            input_img_size=(256, 256),
+            output_img_size=(256, 256),
+        )
+        model = UNet256(num_classes=num_classes).to(device)
     elif "hrnet" in args.model:
         train_dataloader = get_dataloader(
             image_dir=train_img_dir,
@@ -127,12 +167,23 @@ if __name__ == "__main__":
     else:
         raise ValueError("Model architecture does not exist!")
 
+    scheduler_bool = False
     if(args.pretrained_model):
         model = torch.load(args.pretrained_model)
 
-    criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = args.epochs, eta_min = 1e-16, last_epoch=-1, verbose=True)
+    if(args.optim == 'adadelta'):
+        optimizer = torch.optim.Adadelta(model.parameters(), lr=lr)
+    else:
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = args.epochs, eta_min = 1e-6, last_epoch=-1, verbose=True)
+        scheduler_bool = True
+
+    if(args.criterion == 'crossentropy'):
+        criterion = torch.nn.CrossEntropyLoss()
+    elif(args.criterion == 'focalTversky'):
+        criterion = FocalTverskyLoss()
+    else:
+        raise ValueError("Criterion not recognized")
 
     step_losses = []
     epoch_losses = []
@@ -140,6 +191,7 @@ if __name__ == "__main__":
     for epoch in tqdm(range(epochs)):
         epoch_loss = 0
         for X, y in tqdm(train_dataloader):
+            X = X.permute(0, 3, 1, 2)
             optimizer.zero_grad()
             output = model(X.to(device))
             loss = criterion(output, y.to(device))
@@ -147,7 +199,8 @@ if __name__ == "__main__":
             optimizer.step()
             epoch_loss += loss.item()
             step_losses.append(loss.item())
-        scheduler.step()
+        if(scheduler_bool):
+            scheduler.step()
         epoch_loss = epoch_loss / len(train_dataloader)
         logger.info("Average Loss: {}".format(epoch_loss))
         epoch_losses.append(epoch_loss)

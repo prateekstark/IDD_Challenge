@@ -20,12 +20,14 @@ class ICVGIPDataset(Dataset):
         y = []
         for root, directories, files in os.walk(image_dir, topdown=False):
             for name in files:
+                print(name)
                 X.append(os.path.join(root, name))
 
         for root, directories, files in os.walk(labels_dir, topdown=False):
             for name in files:
                 if "_gtFine_labellevel3Ids.png" in name:
                     y.append(os.path.join(root, name))
+
         assert len(X) == len(y)
         X.sort()
         y.sort()
@@ -46,9 +48,9 @@ class ICVGIPDataset(Dataset):
 
     def __getitem__(self, index):
         image_path, label_path = self.samples[index]
-        image = cv2.imread(image_path) / 255.0
-        image = cv2.resize(image, self.input_img_size, interpolation=cv2.INTER_NEAREST).reshape(3, self.input_img_size[0], self.input_img_size[1])
-        image = torch.Tensor(image)
+        image = cv2.imread(image_path)
+        image = cv2.resize(image, self.input_img_size, interpolation=cv2.INTER_NEAREST)
+        image = torch.Tensor(image) / 255.0
 
         labels = cv2.imread(label_path, cv2.IMREAD_GRAYSCALE)
         labels = cv2.resize(labels, self.output_img_size, cv2.INTER_NEAREST)
@@ -60,7 +62,7 @@ class ICVGIPDataset(Dataset):
     def transform(self, image):
         transform_ops = transforms.Compose(
             [
-                transforms.ToTensor(),
+                # transforms.ToTensor(),
                 transforms.Normalize(
                     mean=(0.485, 0.56, 0.406), std=(0.229, 0.224, 0.225)
                 ),
